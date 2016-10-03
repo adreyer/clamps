@@ -7,7 +7,7 @@ class clamps::agent (
   $orch_server           = $::servername,
   $metrics_port          = 2003,
   $metrics_server        = undef,
-  $nonroot_users         = '2',
+  $nonroot_users         = 2,
   $num_facts_per_agent   = 500,
   $percent_changed_facts = 15,
   $splay                 = false,
@@ -15,7 +15,14 @@ class clamps::agent (
   $use_cached_catalog = false,
   $mco_daemon            = running,
   $run_pxp               = false,
+  $enabled_users         = undef,
 ) {
+  if $enabled_users == undef {
+    $max_user = $nonroot_users + 0
+  } else {
+    $max_user = $enabled_users + 0
+  }
+
 
   file { '/etc/puppetlabs/clamps':
     ensure => directory
@@ -31,33 +38,26 @@ class clamps::agent (
     content => "${percent_changed_facts}",
   }
 
-  $nonroot_usernames = clamps_users($nonroot_users)
+  int_range($nonroot_users).each |$i| {
+    $username = "user${i}"
+    $enabled = ($i <= $max_user)
 
-  ::clamps::users { $nonroot_usernames:
-    servername     => $master,
-    ca_server      => $ca,
-    metrics_server => $metrics_server,
-    metrics_port   => $metrics_port,
-    daemonize      => $daemonize,
-    run_pxp        => $run_pxp,
-    splay          => $splay,
-    splaylimit     => $splaylimit,
-    use_cached_catalog => $use_cached_catalog,
+    ::clamps::users { $username:
+      servername     => $master,
+      ca_server      => $ca,
+      metrics_server => $metrics_server,
+      metrics_port   => $metrics_port,
+      daemonize      => $daemonize,
+      splay          => $splay,
+      splaylimit     => $splaylimit,
+      run_pxp        => $enabled and $run_pxp,
+      run_agent      => $enabled,
+      use_cached_catalog => $use_cached_catalog,
+    }
+
+    ::clamps::mcollective { $username:
+      amqservers => $amqserver,
+      amqpass    => $amqpass,
+    }
   }
-
-  # This will not allow the "main" mcollective to start as
-  # it simply checks for a process named mcollective.
-  # The status override in the service resource makes the
-  # non-root nodes work though
-  ::clamps::mcollective { $nonroot_usernames:
-    amqservers => $amqserver,
-    amqpass    => $amqpass,
-  }
-
-  # Need to manage the ec2-user if you enabled this
-  #resources {'user':
-  #  purge              => true,
-  #  unless_system_user => true,
-  # }
-
 }

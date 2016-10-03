@@ -6,6 +6,8 @@ define clamps::users (
   $metrics_port   = 2003,
   $daemonize      = false,
   $run_pxp        = false,
+  # TODO: use a service for daemonize so this works
+  $run_agent      = true,
   $splay          = false,
   $splaylimit     = undef,
   $use_cached_catalog = false,
@@ -148,7 +150,14 @@ define clamps::users (
       default => "/home/${user}/time-puppet-run.sh",
     }
 
+    if $run_agent {
+      $agent_ensure = present
+    } else {
+      $agent_ensure = absent
+    }
+
     cron { "cron.puppet.${user}":
+      ensure  => $agent_ensure,
       command => $cron_command,
       user    => $user,
       minute  => [ $cron_1, $cron_2 ],
